@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hệ thống quản lý đơn hàng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { font-family: "Be Vietnam Pro", Arial, sans-serif; }
+    body {
+      margin: 0;
+      color: #e5edf8;
+      background:
+        radial-gradient(circle at 76% -10%, rgba(63, 99, 214, .24), transparent 34%),
+        linear-gradient(135deg, #041123 0%, #0a1a31 58%, #061426 100%);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #1f3654;
+      text-align: left;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    th { background: #10243d; color: #c9d8ea; font-weight: 700; position: sticky; top: 0; z-index: 5; }
+    tbody tr:hover { background: rgba(31, 54, 84, .45); }
+    .card {
+      border: 1px solid #263d5d;
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(14, 34, 59, .92), rgba(8, 25, 46, .9));
+      box-shadow: 0 16px 34px rgba(0,0,0,.18);
+    }
+    .input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #2a4568;
+      border-radius: 7px;
+      background: #08182d;
+      color: #eef5ff;
+      outline: none;
+      padding: 0 12px;
+    }
+    .input:focus { border-color: #5b7cff; box-shadow: 0 0 0 3px rgba(91,124,255,.18); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      border-radius: 7px;
+      padding: 0 14px;
+      font-weight: 700;
+      transition: .18s ease;
+    }
+    .btn-primary { background: linear-gradient(135deg, #315bdc, #5744d7); color: white; }
+    .btn-primary:hover { filter: brightness(1.12); }
+    .btn-ghost { background: #10243d; color: #dbeafe; border: 1px solid #2b4567; }
+    .btn-green { background: linear-gradient(135deg, #0b8f4c, #08743d); color: white; }
+    .btn-red { background: #b32d2d; color: white; }
+    .hide { display: none !important; }
+    .nav-item { width: 100%; justify-content: flex-start; color: #dbe8fa; background: transparent; }
+    .nav-item.active, .nav-item:hover { background: linear-gradient(135deg, #315bdc, #5744d7); }
+    .badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 800; }
+    .badge-green { background: #116832; color: #a7f3b9; }
+    .badge-blue { background: #1d58bd; color: #dbeafe; }
+    .badge-red { background: #b32d2d; color: #ffe0e0; }
+    .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }
+    .dropzone {
+      border: 1px dashed #49617f;
+      border-radius: 8px;
+      background: rgba(8, 22, 40, .72);
+    }
+    .flash-yellow { animation: flashYellow 2.4s ease; }
+    @keyframes flashYellow {
+      0% { background: #fff2cc; color: #111827; }
+      100% { background: transparent; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4">
+    <section class="card w-full max-w-md p-8 text-center">
+      <div class="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 text-2xl font-black">▣</div>
+      <h1 class="text-2xl font-extrabold uppercase tracking-wide">Hệ thống quản lý đơn hàng</h1>
+      <p class="mt-2 text-sm text-slate-400">Đăng nhập Firebase để nhập đơn hàng và truy vết thao tác.</p>
+      <div class="mt-6 space-y-4 text-left">
+        <label class="block text-xs font-semibold text-slate-400">Email</label>
+        <input id="loginEmail" class="input" type="email" autocomplete="username" placeholder="admin@congty.com">
+        <label class="block text-xs font-semibold text-slate-400">Mật khẩu</label>
+        <input id="loginPassword" class="input" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu">
+      </div>
+      <button id="loginBtn" class="btn btn-primary mt-6 w-full">Đăng nhập</button>
+      <div id="loginMessage" class="mt-4 min-h-5 text-sm font-semibold text-red-400"></div>
+    </section>
+  </div>
+
+  <main id="appView" class="hide grid min-h-screen grid-cols-[258px_minmax(0,1fr)] max-xl:grid-cols-1">
+    <aside class="flex flex-col gap-7 border-r border-slate-800 bg-slate-950/70 p-4">
+      <div class="flex items-center gap-3 border-b border-slate-800 pb-4 uppercase">
+        <div class="grid h-11 w-11 place-items-center rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 font-black">▣</div>
+        <div>
+          <div class="text-xs text-slate-400">Hệ thống quản lý</div>
+          <div class="font-extrabold">Đơn hàng</div>
+        </div>
+      </div>
+
+      <nav class="space-y-2">
+        <div class="px-2 text-xs font-bold uppercase text-slate-500">Menu chính</div>
+        <button class="btn nav-item active" data-screen="dashboard" id="nav-dashboard">Dashboard</button>
+        <button class="btn nav-item" data-screen="import" id="nav-import">Nhập đơn hàng</button>
+        <button class="btn nav-item" data-screen="orders" id="nav-orders">Tổng đơn hàng</button>
+        <button class="btn nav-item" data-screen="mine" id="nav-mine">Đơn hàng của tôi</button>
+        <button class="btn nav-item" data-screen="audit" id="nav-audit">Lịch sử thao tác</button>
+        <button id="usersNav" class="btn nav-item hide" data-screen="users">Người dùng</button>
+      </nav>
+
+      <div class="mt-auto border-t border-slate-800 pt-4">
+        <div class="flex items-center gap-3">
+          <div id="avatar" class="grid h-12 w-12 place-items-center rounded-full bg-slate-600 font-extrabold">U</div>
+          <div class="min-w-0">
+            <div id="currentName" class="truncate font-bold">...</div>
+            <div id="currentEmail" class="truncate text-xs text-slate-400">...</div>
+          </div>
+        </div>
+        <div id="currentRole" class="badge badge-green mt-3">...</div>
+        <button id="logoutBtn" class="btn mt-4 w-full justify-start text-red-300 hover:bg-red-950/40">Đăng xuất</button>
+      </div>
+    </aside>
+
+    <section class="min-w-0 p-5">
+      <header class="-m-5 mb-5 flex h-14 items-center justify-end gap-5 border-b border-slate-800 bg-slate-950/30 px-5 text-sm text-slate-300">
+        <span id="syncStatus" class="badge bg-yellow-500/20 text-yellow-300">Đang kết nối...</span>
+        <span id="todayLabel"></span>
+      </header>
+
+      <section id="dashboard" class="screen">
+        <h2 class="text-2xl font-extrabold">Dashboard Admin</h2>
+        <p class="mt-1 text-sm text-slate-400">Tổng quan hoạt động cập nhật đơn hàng</p>
+        <div class="mt-5 grid grid-cols-4 gap-4 max-2xl:grid-cols-2 max-md:grid-cols-1">
+          <article class="card flex min-h-[112px] items-center gap-4 p-5">
+            <div class="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 text-xl font-black">□</div>
+            <div><div class="text-xs uppercase text-slate-400">Đơn hôm nay</div><div id="kpiToday" class="text-3xl font-extrabold">0</div><div class="text-xs text-green-400">Theo dữ liệu Firebase</div></div>
+          </article>
+          <article class="card flex min-h-[112px] items-center gap-4 p-5">
+            <div class="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-green-500 to-green-800 text-xl font-black">▤</div>
+            <div><div class="text-xs uppercase text-slate-400">Tuần này</div><div id="kpiWeek" class="text-3xl font-extrabold">0</div><div class="text-xs text-green-400">Đơn đã lưu</div></div>
+          </article>
+          <article class="card flex min-h-[112px] items-center gap-4 p-5">
+            <div class="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-800 text-xl font-black">◇</div>
+            <div><div class="text-xs uppercase text-slate-400">Tháng này</div><div id="kpiMonth" class="text-3xl font-extrabold">0</div><div class="text-xs text-green-400">Tự động thống kê</div></div>
+          </article>
+          <article class="card flex min-h-[112px] items-center gap-4 p-5">
+            <div class="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-700 text-xl font-black">▱</div>
+            <div><div class="text-xs uppercase text-slate-400">Tổng đơn hàng</div><div id="kpiTotal" class="text-3xl font-extrabold">0</div><div class="text-xs text-slate-400">Tất cả thời gian</div></div>
+          </article>
+        </div>
+
+        <div class="mt-4 grid grid-cols-2 gap-4 max-xl:grid-cols-1">
+          <section class="card min-w-0 p-4">
+            <div class="mb-3 flex items-center justify-between"><h3 class="text-lg font-bold">Đơn hàng mới cập nhật</h3><button class="text-sm text-blue-300" id="viewAllOrdersBtn">Xem tất cả</button></div>
+            <div class="scrollbar max-h-[360px] overflow-auto"><table id="recentOrdersTable"></table></div>
+          </section>
+          <section class="card min-w-0 p-4">
+            <div class="mb-3 flex items-center justify-between"><h3 class="text-lg font-bold">Lịch sử thao tác</h3><button class="text-sm text-blue-300" id="viewAllAuditBtn">Xem tất cả</button></div>
+            <div id="recentAuditList" class="space-y-3"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="import" class="screen hide">
+        <h2 class="text-2xl font-extrabold">Nhập đơn hàng</h2>
+        <p class="mt-1 text-sm text-slate-400">Đọc file Excel trên trình duyệt, preview trước khi lưu vào Firebase và đồng bộ Google Sheet.</p>
+        <div class="mt-5 grid grid-cols-[1fr_1fr_.9fr] gap-4 max-xl:grid-cols-1">
+          <section class="card p-4">
+            <h3 class="font-bold">1. Import file đơn hàng</h3>
+            <p class="mt-1 text-sm text-slate-400">Chọn file Excel đúng mẫu.</p>
+            <label class="dropzone mt-4 flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-3 p-4 text-center">
+              <div class="text-4xl">▣</div>
+              <div class="btn btn-primary">Chọn file Excel</div>
+              <input id="excelFile" class="hide" type="file" accept=".xlsx,.xls">
+            </label>
+            <div id="fileInfo" class="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-sm text-slate-300">Chưa chọn file.</div>
+          </section>
+
+          <section class="card p-4">
+            <h3 class="font-bold">2. Upload market</h3>
+            <p class="mt-1 text-sm text-slate-400">Ảnh/PDF được lưu Firebase Storage nếu có.</p>
+            <label class="dropzone mt-4 flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-3 p-4 text-center">
+              <div class="text-4xl">□</div>
+              <div class="btn btn-ghost">Chọn ảnh / PDF</div>
+              <input id="marketFile" class="hide" type="file" accept="image/*,.pdf">
+            </label>
+            <div id="marketInfo" class="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-sm text-slate-300">Không bắt buộc.</div>
+          </section>
+
+          <section class="card p-4">
+            <h3 class="font-bold">3. Xác nhận</h3>
+            <div class="mt-4 grid grid-cols-3 gap-2 text-sm">
+              <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-3"><span class="text-slate-400">Số đơn</span><b id="previewCount" class="mt-1 block text-xl">0</b></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-3"><span class="text-slate-400">Tổng tấn</span><b id="previewTons" class="mt-1 block text-xl">0</b></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-3"><span class="text-slate-400">Ngày</span><b id="previewDate" class="mt-1 block text-base">-</b></div>
+            </div>
+            <button class="btn btn-primary mt-4 w-full" id="confirmImportBtn">Xác nhận lưu đơn hàng</button>
+            <div id="importMessage" class="mt-3 min-h-6 text-sm font-semibold text-green-300"></div>
+          </section>
+        </div>
+
+        <section class="card mt-4 p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-lg font-bold">Preview dữ liệu Excel</h3>
+            <span class="text-sm text-slate-400">Các dòng lưu mới sẽ được đánh dấu vàng trong app và Google Sheet.</span>
+          </div>
+          <div class="scrollbar max-h-[460px] overflow-auto"><table id="previewTable"></table></div>
+        </section>
+      </section>
+
+      <section id="orders" class="screen hide">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 class="text-2xl font-extrabold">Tổng đơn hàng</h2><p class="mt-1 text-sm text-slate-400">Dữ liệu chính lưu trên Firebase, Google Sheet là bản đồng bộ.</p></div>
+          <div class="flex gap-2"><button class="btn btn-ghost" id="reloadAllBtn">Làm mới</button><button class="btn btn-green" id="exportOrdersBtn">Xuất Excel</button></div>
+        </div>
+        <div class="card mt-4 p-4">
+          <div class="mb-4 flex flex-wrap items-end gap-3">
+            <label class="text-xs text-slate-400">Từ ngày<input id="filterFrom" class="input mt-1" type="date"></label>
+            <label class="text-xs text-slate-400">Đến ngày<input id="filterTo" class="input mt-1" type="date"></label>
+            <label class="text-xs text-slate-400">Tìm kiếm<input id="filterSearch" class="input mt-1" placeholder="Khách hàng, mã hàng..."></label>
+            <button class="btn btn-primary" id="btnFilter">Lọc</button>
+          </div>
+          <div class="scrollbar max-h-[650px] overflow-auto"><table id="ordersTable"></table></div>
+        </div>
+      </section>
+
+      <section id="mine" class="screen hide">
+        <h2 class="text-2xl font-extrabold">Đơn hàng của tôi</h2>
+        <p class="mt-1 text-sm text-slate-400">Chỉ hiển thị đơn do tài khoản hiện tại tạo.</p>
+        <div class="card mt-4 p-4"><div class="scrollbar max-h-[700px] overflow-auto"><table id="myOrdersTable"></table></div></div>
+      </section>
+
+      <section id="audit" class="screen hide">
+        <h2 class="text-2xl font-extrabold">Lịch sử thao tác</h2>
+        <p class="mt-1 text-sm text-slate-400">Truy vết người tạo đơn, import, đăng nhập và đồng bộ Google Sheet.</p>
+        <div class="card mt-4 p-4"><div class="scrollbar max-h-[700px] overflow-auto"><table id="auditTable"></table></div></div>
+      </section>
+
+      <section id="users" class="screen hide">
+        <h2 class="text-2xl font-extrabold">Quản lý người dùng</h2>
+        <p class="mt-1 text-sm text-slate-400">Tạo tài khoản Auth trong Firebase Console, sau đó gán quyền tại đây bằng UID hoặc email.</p>
+        <div class="mt-4 grid grid-cols-[420px_1fr] gap-4 max-xl:grid-cols-1">
+          <section class="card p-4">
+            <h3 class="font-bold">Gán quyền user</h3>
+            <div class="mt-4 space-y-3">
+              <input id="userUid" class="input" placeholder="UID Firebase Auth">
+              <input id="userEmailInput" class="input" placeholder="Email">
+              <input id="userNameInput" class="input" placeholder="Tên người dùng">
+              <select id="userRoleInput" class="input">
+                <option value="ADMIN">ADMIN</option>
+                <option value="SALES">SALES - Kinh doanh</option>
+                <option value="CUSTOMER">CUSTOMER - Khách hàng</option>
+                <option value="VIEWER">VIEWER - Chỉ xem</option>
+              </select>
+              <button class="btn btn-primary w-full" id="saveUserProfileBtn">Lưu quyền</button>
+              <p class="text-xs text-slate-500">Bản một-file không tự tạo mật khẩu để tránh lộ quyền admin Auth. Tạo user trong Firebase Authentication trước.</p>
+            </div>
+          </section>
+          <section class="card p-4">
+            <h3 class="mb-3 font-bold">Danh sách user</h3>
+            <div class="scrollbar max-h-[520px] overflow-auto"><table id="usersTable"></table></div>
+          </section>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getDatabase, ref, set, push, update, onValue, get, child, limitToLast, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+    const APP_CONFIG = {
+      firebaseConfig: {
+        apiKey: "AIzaSyBP2ZsUm4QGsR0Kfx6yi7VMrPNZavMH3hk",
+        authDomain: "ghinhandonzalo.firebaseapp.com",
+        databaseURL: "https://ghinhandonzalo-default-rtdb.firebaseio.com",
+        projectId: "ghinhandonzalo",
+        storageBucket: "ghinhandonzalo.firebasestorage.app",
+        messagingSenderId: "860298109915",
+        appId: "1:860298109915:web:341a1f2f10dd58d496bdfe"
+      },
+      rootPath: "order_system",
+      sheetSyncFunctionUrl: "https://script.google.com/macros/s/AKfycbwGFnIKKPFuD_P62ydRD_p_0fRHhUabsaL0uQ0N1XbojxVMxmzdNzCZ3fJkSYBsqeR9/exec",
+      bootstrapAdminEmails: ["admin@congty.com"],
+      sourceHeaders: [
+        "STT", "Khách hàng", "Mã hàng", "Cỡ hạt", "Chất lượng đá", "Quy cách bao",
+        "Quy cách đóng hàng", "Số cont", "Số tấn", "Hãng vận chuyển", "Ngày tàu đi",
+        "Địa điểm giao", "Hình Market", "Ghi chú"
+      ],
+      dateHeaders: ["Ngày tàu đi", "Ngày giao", "Ngày"]
+    };
+
+    const state = {
+      user: null,
+      profile: null,
+      orders: [],
+      auditLogs: [],
+      users: [],
+      previewRows: [],
+      selectedExcelFile: null,
+      selectedMarketFile: null,
+      marketUrl: ""
+    };
+
+    let app, auth, database, storage;
+
+    document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("vi-VN", {
+      weekday: "long", year: "numeric", month: "2-digit", day: "2-digit"
+    });
+
+    async function startApp() {
+      try {
+        initFirebase();
+        bindUIEvents();
+      } catch (err) {
+        console.error("Lỗi khởi tạo hệ thống:", err);
+        document.getElementById("loginMessage").textContent = "Lỗi hệ thống: " + err.message;
+      }
+    }
+
+    function initFirebase() {
+      const cfg = APP_CONFIG.firebaseConfig;
+      if (!cfg.apiKey || cfg.apiKey.includes("PASTE_")) {
+        document.getElementById("loginMessage").textContent = "Chưa cấu hình chính xác Firebase Config.";
+        return;
+      }
+      
+      app = initializeApp(cfg);
+      auth = getAuth(app);
+      database = getDatabase(app);
+      storage = getStorage(app);
+
+      const connectedRef = ref(database, ".info/connected");
+      onValue(connectedRef, (snap) => {
+        const el = document.getElementById("syncStatus");
+        if (el) {
+          el.textContent = snap.val() ? "Đang kết nối đám mây" : "Mất kết nối";
+          el.className = snap.val() ? "badge badge-green" : "badge bg-yellow-500/20 text-yellow-300";
+        }
+      });
+
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          state.user = null;
+          state.profile = null;
+          document.getElementById("loginView").classList.remove("hide");
+          document.getElementById("appView").classList.add("hide");
+          return;
+        }
+        
+        state.user = user;
+        document.getElementById("loginMessage").textContent = "Đang đồng bộ quyền tài khoản...";
+        
+        await loadOrBootstrapProfile(user);
+        
+        if (!state.profile || !state.profile.active) {
+          document.getElementById("loginMessage").textContent = "Tài khoản không được kích hoạt hoặc chưa cấp quyền.";
+          await signOut(auth);
+          return;
+        }
+        
+        document.getElementById("loginMessage").textContent = "";
+        enterApp();
+        subscribeData();
+        writeAudit("LOGIN", "Đăng nhập hệ thống");
+      });
+    }
+
+    function bindUIEvents() {
+      document.getElementById("loginBtn").addEventListener("click", handleLogin);
+      document.getElementById("logoutBtn").addEventListener("click", handleLogout);
+      document.getElementById("excelFile").addEventListener("change", handleExcelSelect);
+      document.getElementById("marketFile").addEventListener("change", handleMarketSelect);
+      document.getElementById("confirmImportBtn").addEventListener("click", confirmImport);
+      document.getElementById("viewAllOrdersBtn").addEventListener("click", () => showScreen('orders'));
+      document.getElementById("viewAllAuditBtn").addEventListener("click", () => showScreen('audit'));
+      document.getElementById("reloadAllBtn").addEventListener("click", reloadAll);
+      document.getElementById("exportOrdersBtn").addEventListener("click", exportOrders);
+      document.getElementById("btnFilter").addEventListener("click", renderOrders);
+      document.getElementById("filterSearch").addEventListener("input", renderOrders);
+      document.getElementById("saveUserProfileBtn").addEventListener("click", saveUserProfile);
+      
+      document.querySelectorAll(".nav-item").forEach(btn => {
+        btn.addEventListener("click", () => showScreen(btn.dataset.screen));
+      });
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass = document.getElementById("loginPassword").value;
+      const msg = document.getElementById("loginMessage");
+      
+      if (!email || !pass) {
+        msg.textContent = "Vui lòng nhập đầy đủ Email và Mật khẩu.";
+        return;
+      }
+      
+      msg.textContent = "Đang xử lý đăng nhập...";
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (err) {
+        console.error(err);
+        if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
+          msg.textContent = "Sai tài khoản hoặc mật khẩu.";
+        } else {
+          msg.textContent = "Lỗi: " + err.message;
+        }
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        await writeAudit("LOGOUT", "Đăng xuất hệ thống");
+        await signOut(auth);
+      } catch (err) {
+        await signOut(auth);
+      }
+    }
+
+    async function loadOrBootstrapProfile(user) {
+      const userRef = ref(database, `${APP_CONFIG.rootPath}/users/${user.uid}`);
+      const email = user.email.toLowerCase();
+      
+      try {
+        const snap = await get(userRef);
+        let profile = snap.exists() ? snap.val() : null;
+
+        if (!profile && APP_CONFIG.bootstrapAdminEmails.map(x => x.toLowerCase()).includes(email)) {
+          profile = {
+            uid: user.uid,
+            email,
+            name: user.displayName || "Admin Hệ thống",
+            role: "ADMIN",
+            active: true,
+            createdAt: nowIso()
+          };
+          await set(userRef, profile);
+        }
+        state.profile = profile;
+      } catch (e) {
+        console.error("Lỗi đồng bộ cấu hình Profile:", e);
+        if (APP_CONFIG.bootstrapAdminEmails.map(x => x.toLowerCase()).includes(email)) {
+          state.profile = {
+            uid: user.uid,
+            email,
+            name: "Admin Dự phòng",
+            role: "ADMIN",
+            active: true,
+            createdAt: nowIso()
+          };
+        } else {
+          state.profile = null;
+        }
+      }
+    }
+
+    function enterApp() {
+      document.getElementById("loginView").classList.add("hide");
+      document.getElementById("appView").classList.remove("hide");
+      if(state.profile) {
+        document.getElementById("currentName").textContent = state.profile.name || state.user.email;
+        document.getElementById("currentEmail").textContent = state.user.email;
+        document.getElementById("currentRole").textContent = state.profile.role;
+        document.getElementById("avatar").textContent = initials(state.profile.name || state.user.email);
+        document.getElementById("usersNav").classList.toggle("hide", !isAdmin());
+      }
+    }
+
+    function subscribeData() {
+      onValue(ref(database, `${APP_CONFIG.rootPath}/orders`), (snap) => {
+        const data = snap.val() || {};
+        state.orders = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+        renderAll();
+      });
+
+      const auditQuery = query(ref(database, `${APP_CONFIG.rootPath}/auditLogs`), limitToLast(150));
+      onValue(auditQuery, (snap) => {
+        const data = snap.val() || {};
+        state.auditLogs = Object.entries(data).map(([id, value]) => ({ id, ...value })).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        renderAudit();
+        renderRecentAudit();
+      });
+
+      if (isAdmin()) {
+        onValue(ref(database, `${APP_CONFIG.rootPath}/users`), (snap) => {
+          const data = snap.val() || {};
+          state.users = Object.entries(data).map(([uid, value]) => ({ uid, ...value }));
+          renderUsers();
+        });
+      }
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll(".screen").forEach(el => el.classList.add("hide"));
+      document.getElementById(id).classList.remove("hide");
+      document.querySelectorAll(".nav-item").forEach(el => el.classList.toggle("active", el.dataset.screen === id));
+      if (id === "orders") renderOrders();
+      if (id === "mine") renderMyOrders();
+      if (id === "audit") renderAudit();
+      if (id === "users") renderUsers();
+    }
+
+    async function handleExcelSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      state.selectedExcelFile = file;
+      document.getElementById("fileInfo").textContent = `${file.name} - ${(file.size / 1024).toFixed(1)} KB`;
+      const workbook = await readWorkbook(file);
+      const firstSheet = workbook.SheetNames[0];
+      const rows = workbook[firstSheet] || [];
+      state.previewRows = normalizeExcelRows(rows);
+      renderPreview();
+    }
+
+    function handleMarketSelect(event) {
+      const file = event.target.files[0];
+      state.selectedMarketFile = file || null;
+      document.getElementById("marketInfo").textContent = file ? `${file.name} - ${(file.size / 1024 / 1024).toFixed(2)} MB` : "Không bắt buộc.";
+    }
+
+    function readWorkbook(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = event => {
+          try {
+            const wb = XLSX.read(new Uint8Array(event.target.result), { type: "array", cellDates: true });
+            const result = { SheetNames: wb.SheetNames };
+            wb.SheetNames.forEach(name => {
+              result[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true });
+            });
+            resolve(result);
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function normalizeExcelRows(matrix) {
+      if (!matrix || matrix.length < 2) return [];
+      const headerRow = matrix[0].map(normalizeHeader);
+      const index = {};
+      headerRow.forEach((h, i) => index[h] = i);
+      return matrix.slice(1).map((row, rowIndex) => {
+        const item = {};
+        APP_CONFIG.sourceHeaders.forEach(h => {
+          const i = index[normalizeHeader(h)];
+          item[h] = i === undefined ? "" : row[i];
+        });
+        item._sourceRow = rowIndex + 2;
+        item._dateKey = dateKey(firstNonEmpty(APP_CONFIG.dateHeaders.map(h => item[h])));
+        item._importHash = hashLike(APP_CONFIG.sourceHeaders.filter(h => h !== "STT").map(h => valueKey(item[h])).join("|"));
+        return item;
+      }).filter(row => APP_CONFIG.sourceHeaders.some(h => h !== "STT" && String(row[h] || "").trim() !== ""));
+    }
+
+    function renderPreview() {
+      const rows = state.previewRows;
+      document.getElementById("previewCount").textContent = rows.length;
+      document.getElementById("previewTons").textContent = formatNumber(rows.reduce((sum, r) => sum + parseNumber(r["Số tấn"]), 0), 1);
+      const uniqueDates = [...new Set(rows.map(r => r._dateKey).filter(Boolean))].sort();
+      document.getElementById("previewDate").textContent = uniqueDates.length === 1 ? displayDate(uniqueDates[0]) : `${uniqueDates.length || 0} ngày`;
+      renderSimpleTable("previewTable", rows.slice(0, 100), APP_CONFIG.sourceHeaders.concat(["_dateKey"]));
+    }
+
+    async function confirmImport() {
+      const msg = document.getElementById("importMessage");
+      if (!state.previewRows.length) {
+        msg.textContent = "Vui lòng chọn file Excel có dữ liệu.";
+        msg.className = "mt-3 min-h-6 text-sm font-semibold text-red-300";
+        return;
+      }
+      msg.textContent = "Đang tiến hành lưu đơn...";
+      msg.className = "mt-3 min-h-6 text-sm font-semibold text-green-300";
+      const existingHashes = new Set(state.orders.map(o => o.importHash));
+      
+      const importId = push(ref(database, `${APP_CONFIG.rootPath}/imports`)).key;
+      const marketUrl = await uploadMarketFile(importId);
+      const createdAt = nowIso();
+      const updates = {};
+      const newOrders = [];
+      let skipped = 0;
+
+      state.previewRows.forEach(row => {
+        if (existingHashes.has(row._importHash)) {
+          skipped++;
+          return;
+        }
+        const id = push(ref(database, `${APP_CONFIG.rootPath}/orders`)).key;
+        const order = {
+          id,
+          importId,
+          importHash: row._importHash,
+          orderCode: makeOrderCode(row._dateKey),
+          sourceFileName: state.selectedExcelFile?.name || "",
+          marketUrl,
+          createdAt,
+          createdByUid: state.user.uid,
+          createdByEmail: state.user.email.toLowerCase(),
+          createdByName: state.profile?.name || state.user.email,
+          status: "Đã lưu",
+          highlighted: true,
+          dateKey: row._dateKey,
+          data: pickSourceData(row)
+        };
+        updates[`${APP_CONFIG.rootPath}/orders/${id}`] = order;
+        newOrders.push(order);
+      });
+
+      updates[`${APP_CONFIG.rootPath}/imports/${importId}`] = {
+        importId,
+        fileName: state.selectedExcelFile?.name || "",
+        marketUrl,
+        createdAt,
+        createdByUid: state.user.uid,
+        createdByEmail: state.user.email.toLowerCase(),
+        createdByName: state.profile?.name || state.user.email,
+        totalRows: state.previewRows.length,
+        inserted: newOrders.length,
+        skipped
+      };
+      
+      try {
+        await update(ref(database), updates);
+        await writeAudit("IMPORT", `Import ${newOrders.length} đơn. Trùng lặp bỏ qua: ${skipped}.`);
+        await syncToGoogleSheet(newOrders, importId);
+        state.previewRows = [];
+        state.selectedExcelFile = null;
+        document.getElementById("excelFile").value = "";
+        document.getElementById("fileInfo").textContent = "Chưa chọn file.";
+        renderPreview();
+        msg.textContent = `Đã lưu thành công ${newOrders.length} đơn. Trùng: ${skipped}.`;
+      } catch (err) {
+        msg.textContent = "Lỗi lưu dữ liệu: " + err.message;
+        msg.className = "mt-3 min-h-6 text-sm font-semibold text-red-300";
+      }
+    }
+
+    async function uploadMarketFile(importId) {
+      if (!state.selectedMarketFile || !storage) return "";
+      try {
+        const ext = state.selectedMarketFile.name.split(".").pop();
+        const path = `${APP_CONFIG.rootPath}/market/${importId}.${ext}`;
+        const storageRef = sRef(storage, path);
+        const snap = await uploadBytes(storageRef, state.selectedMarketFile);
+        return await getDownloadURL(snap.ref);
+      } catch (e) {
+        console.error("Lỗi upload file Storage:", e);
+        return "";
+      }
+    }
+
+    async function syncToGoogleSheet(orders) {
+      if (!APP_CONFIG.sheetSyncFunctionUrl) {
+        console.log("Chưa cấu hình URL đồng bộ Google Sheet.");
+        return;
+      }
+      
+      console.log("Bắt đầu gửi dữ liệu sang Google Sheet...", orders);
+      
+      try {
+        // Ép dữ liệu về dạng JSON text thuần để tránh lỗi truyền nhận
+        const payload = JSON.stringify({ orders: orders });
+        
+        const response = await fetch(APP_CONFIG.sheetSyncFunctionUrl, {
+          method: "POST",
+          mode: "no-cors", // Bật chế độ xuyên tường lửa ngăn lỗi đỏ CORS trên trình duyệt
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: payload
+        });
+        
+        console.log("Đã kích hoạt lệnh gửi ngầm thành công!");
+        showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
+        
+      } catch (error) {
+        console.error("Lỗi khi kết nối với Google Sheet:", error);
+        showToast("Không thể kết nối với Google Sheet", "error");
+      }
+    }
+
+    function renderAll() {
+      renderDashboard();
+      renderOrders();
+      renderMyOrders();
+    }
+
+    function renderDashboard() {
+      const today = dateKey(new Date());
+      const weekStart = startOfWeekKey(new Date());
+      const monthKey = today.slice(0, 7);
+      document.getElementById("kpiToday").textContent = state.orders.filter(o => o.dateKey === today).length;
+      document.getElementById("kpiWeek").textContent = state.orders.filter(o => o.dateKey >= weekStart).length;
+      document.getElementById("kpiMonth").textContent = state.orders.filter(o => (o.dateKey || "").startsWith(monthKey)).length;
+      document.getElementById("kpiTotal").textContent = state.orders.length;
+      const recent = [...state.orders].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 8);
+      renderOrderTable("recentOrdersTable", recent);
+    }
+
+    function renderOrders() {
+      let rows = [...state.orders];
+      if (!isAdmin() && state.profile?.role !== "VIEWER") {
+        rows = rows.filter(o => o.createdByUid === state.user?.uid);
+      }
+      const from = document.getElementById("filterFrom").value;
+      const to = document.getElementById("filterTo").value;
+      const q = normalizeText(document.getElementById("filterSearch").value || "");
+      if (from) rows = rows.filter(o => o.dateKey >= from);
+      if (to) rows = rows.filter(o => o.dateKey <= to);
+      if (q) rows = rows.filter(o => normalizeText(JSON.stringify(o)).includes(q));
+      rows.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      renderOrderTable("ordersTable", rows);
+    }
+
+    function renderMyOrders() {
+      renderOrderTable("myOrdersTable", state.orders.filter(o => o.createdByUid === state.user?.uid).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")));
+    }
+
+    function renderOrderTable(id, orders) {
+      const rows = orders.map(o => ({
+        "Ngày giao": displayDate(o.dateKey),
+        "Mã đơn": o.orderCode,
+        "Khách hàng": o.data?.["Khách hàng"] || "",
+        "Mã hàng": o.data?.["Mã hàng"] || "",
+        "Cỡ hạt": o.data?.["Cỡ hạt"] || "",
+        "Chất lượng đá": o.data?.["Chất lượng đá"] || "",
+        "Số cont": o.data?.["Số cont"] || "",
+        "Số tấn": o.data?.["Số tấn"] || "",
+        "Người tạo": o.createdByName || "",
+        "Thời gian tạo": formatDateTime(o.createdAt),
+        "Trạng thái": o.status || ""
+      }));
+      renderSimpleTable(id, rows, Object.keys(rows[0] || {
+        "Ngày giao": "", "Mã đơn": "", "Khách hàng": "", "Mã hàng": "", "Số tấn": "", "Người tạo": "", "Trạng thái": ""
+      }), orders);
+    }
+
+    function renderSimpleTable(id, rows, headers, rawRows) {
+      const table = document.getElementById(id);
+      if (!table) return;
+      if (!rows.length) {
+        table.innerHTML = `<tbody><tr><td class="py-8 text-center text-slate-500">Chưa có dữ liệu phù hợp.</td></tr></tbody>`;
+        return;
+      }
+      table.innerHTML =
+        `<thead><tr>${headers.map(h => `<th>${escapeHtml(h.replace(/^_/, ""))}</th>`).join("")}</tr></thead>` +
+        `<tbody>${rows.map((r, idx) => {
+          const raw = rawRows?.[idx];
+          const cls = raw?.highlighted ? "flash-yellow" : "";
+          return `<tr class="${cls}">${headers.map(h => `<td>${renderCell(h, r[h])}</td>`).join("")}</tr>`;
+        }).join("")}</tbody>`;
+    }
+
+    function renderCell(header, value) {
+      if (header === "Trạng thái") return `<span class="badge badge-green">${escapeHtml(value || "Đã lưu")}</span>`;
+      return escapeHtml(value ?? "");
+    }
+
+    function renderAudit() {
+      const rows = (isAdmin() ? state.auditLogs : state.auditLogs.filter(x => x.uid === state.user?.uid)).map(log => ({
+        "Thời gian": formatDateTime(log.createdAt),
+        "Người dùng": log.name || log.email || "",
+        "Vai trò": log.role || "",
+        "Hành động": log.action || "",
+        "Chi tiết": log.detail || ""
+      }));
+      renderSimpleTable("auditTable", rows, Object.keys(rows[0] || {"Thời gian":"", "Người dùng":"", "Hành động":"", "Chi tiết":""}));
+    }
+
+    function renderRecentAudit() {
+      const box = document.getElementById("recentAuditList");
+      if (!box) return;
+      const rows = (isAdmin() ? state.auditLogs : state.auditLogs.filter(x => x.uid === state.user?.uid)).slice(0, 7);
+      if (!rows.length) {
+        box.innerHTML = `<div class="text-sm text-slate-500">Chưa có lịch sử.</div>`;
+        return;
+      }
+      box.innerHTML = rows.map(log => `
+        <div class="grid grid-cols-[72px_1fr_72px] items-center gap-3 border-b border-slate-800 pb-3">
+          <time class="text-xs text-slate-400">${escapeHtml(formatTime(log.createdAt))}</time>
+          <div><div class="text-sm font-bold">${escapeHtml(log.name || log.email || "")}</div><div class="text-xs text-slate-400">${escapeHtml(log.detail || "")}</div></div>
+          <span class="badge ${log.action === "IMPORT" ? "badge-green" : log.action.includes("ERROR") ? "badge-red" : "badge-blue"}">${escapeHtml(log.action || "")}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderUsers() {
+      if (!isAdmin()) return;
+      const rows = state.users.map(u => ({
+        "UID": u.uid,
+        "Email": u.email,
+        "Tên": u.name,
+        "Vai trò": u.role,
+        "Active": u.active !== false ? "Có" : "Không",
+        "Ngày tạo": formatDateTime(u.createdAt)
+      }));
+      renderSimpleTable("usersTable", rows, Object.keys(rows[0] || {"UID":"", "Email":"", "Tên":"", "Vai trò":""}));
+    }
+
+    async function saveUserProfile() {
+      const uid = document.getElementById("userUid").value.trim();
+      if (!uid) return alert("Vui lòng cung cấp UID Firebase Auth.");
+      const profile = {
+        uid,
+        email: document.getElementById("userEmailInput").value.trim().toLowerCase(),
+        name: document.getElementById("userNameInput").value.trim(),
+        role: document.getElementById("userRoleInput").value,
+        active: true,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        updatedBy: state.user?.uid || ""
+      };
+      try {
+        await update(ref(database, `${APP_CONFIG.rootPath}/users/${uid}`), profile);
+        await writeAudit("SAVE_USER", `Gán quyền ${profile.role} cho ${profile.email || uid}`);
+        alert("Đã lưu phân quyền người dùng.");
+      } catch (err) {
+        alert("Lỗi phân quyền: " + err.message);
+      }
+    }
+
+    function exportOrders() {
+      const rows = state.orders.map(o => ({
+        "Ngày giao": displayDate(o.dateKey),
+        "Mã đơn": o.orderCode,
+        ...o.data,
+        "Người tạo": o.createdByName,
+        "Email người tạo": o.createdByEmail,
+        "Thời gian tạo": formatDateTime(o.createdAt),
+        "Nguồn file": o.sourceFileName,
+        "Trạng thái": o.status
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, "Tong don hang");
+      XLSX.writeFile(wb, `TONG_DON_HANG_${dateKey(new Date())}.xlsx`);
+      writeAudit("EXPORT", `Xuất file Excel gồm ${rows.length} đơn hàng.`);
+    }
+
+    function reloadAll() {
+      renderAll();
+      writeAudit("REFRESH", "Yêu cầu đồng bộ lại màn hình dữ liệu.");
+    }
+
+    function pickSourceData(row) {
+      const out = {};
+      APP_CONFIG.sourceHeaders.forEach(h => out[h] = serializeValue(row[h]));
+      return out;
+    }
+
+    async function writeAudit(action, detail, payload) {
+      if (!database || !state.user || !state.profile) return;
+      try {
+        const newAuditRef = push(ref(database, `${APP_CONFIG.rootPath}/auditLogs`));
+        await set(newAuditRef, {
+          id: newAuditRef.key,
+          uid: state.user.uid,
+          email: state.user.email.toLowerCase(),
+          name: state.profile.name || state.user.email,
+          role: state.profile.role,
+          action,
+          detail,
+          payload: payload || null,
+          createdAt: nowIso()
+        });
+      } catch (e) { console.error(e); }
+    }
+
+    function isAdmin() { return state.profile?.role === "ADMIN"; }
+
+    function makeOrderCode(date) {
+      const key = (date || dateKey(new Date())).replace(/-/g, "").slice(2);
+      return `DH${key}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    }
+
+    function normalizeHeader(value) { return String(value || "").trim().toLowerCase(); }
+    function normalizeText(value) { return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+    function firstNonEmpty(values) { return values.find(v => v !== null && v !== undefined && String(v).trim() !== "") || ""; }
+    
+    function parseNumber(value) {
+      if (typeof value === "number") return value;
+      return Number(String(value || "0").replace(",", ".").replace(/[^\d.-]/g, "")) || 0;
+    }
+
+    function dateKey(value) {
+      if (!value) return "";
+      let d = value;
+      if (!(d instanceof Date)) {
+        if (typeof value === "number") {
+          d = new Date(Math.round((value - 25569) * 86400 * 1000));
+        } else {
+          const text = String(value).trim();
+          const m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+          d = m ? new Date(Number(m[3].length === 2 ? "20" + m[3] : m[3]), Number(m[2]) - 1, Number(m[1])) : new Date(text);
+        }
+      }
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    }
+
+    function displayDate(key) {
+      if (!key) return "";
+      const [y, m, d] = key.split("-");
+      return `${d}/${m}/${y}`;
+    }
+
+    function nowIso() { return new Date().toISOString(); }
+    function formatDateTime(value) {
+      if (!value) return "";
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("vi-VN");
+    }
+
+    function formatTime(value) {
+      if (!value) return "";
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function startOfWeekKey(date) {
+      const d = new Date(date);
+      const day = d.getDay() || 7;
+      d.setDate(d.getDate() - day + 1);
+      return dateKey(d);
+    }
+
+    function serializeValue(value) {
+      if (value instanceof Date) return dateKey(value);
+      return value ?? "";
+    }
+
+    function valueKey(value) {
+      if (value instanceof Date) return dateKey(value);
+      return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function hashLike(text) {
+      let h = 0;
+      for (let i = 0; i < text.length; i++) h = Math.imul(31, h) + text.charCodeAt(i) | 0;
+      return `h${Math.abs(h)}_${text.length}`;
+    }
+
+    function formatNumber(value, digits) { return Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits: digits ?? 2 }); }
+    function initials(name) { return String(name || "U").trim().split(/\s+/).slice(-2).map(x => x[0]).join("").toUpperCase(); }
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+    }
+
+    startApp();
+  </script>
+</body>
+</html>
