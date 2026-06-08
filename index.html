@@ -672,12 +672,11 @@
       console.log("Bắt đầu gửi dữ liệu sang Google Sheet...", orders);
       
       try {
-        // Ép dữ liệu về dạng JSON text thuần để tránh lỗi truyền nhận
         const payload = JSON.stringify({ orders: orders });
         
         const response = await fetch(APP_CONFIG.sheetSyncFunctionUrl, {
           method: "POST",
-          mode: "no-cors", // Bật chế độ xuyên tường lửa ngăn lỗi đỏ CORS trên trình duyệt
+          mode: "no-cors", 
           headers: {
             "Content-Type": "text/plain;charset=utf-8"
           },
@@ -685,11 +684,21 @@
         });
         
         console.log("Đã kích hoạt lệnh gửi ngầm thành công!");
-        showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
+        
+        // Kiểm tra an toàn: Nếu có hàm showToast thì dùng, không thì dùng alert mặc định hoặc bỏ qua
+        if (typeof showToast === "function") {
+          showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
+        } else {
+          console.log("Đang đồng bộ dữ liệu sang Google Sheet...");
+        }
         
       } catch (error) {
         console.error("Lỗi khi kết nối với Google Sheet:", error);
-        showToast("Không thể kết nối với Google Sheet", "error");
+        if (typeof showToast === "function") {
+          showToast("Không thể kết nối với Google Sheet", "error");
+        } else {
+          alert("Không thể kết nối với Google Sheet!");
+        }
       }
     }
 
