@@ -672,22 +672,24 @@
   console.log("Bắt đầu gửi dữ liệu sang Google Sheet...", orders);
   
   try {
-    // Chuyển dữ liệu thành chuỗi JSON bọc trong một tham số 'data'
-    const payload = new URLSearchParams();
-    payload.append("data", JSON.stringify(orders));
+    // Ép kiểu dữ liệu thành chuỗi text thuần túy để tránh bị trình duyệt chặn CORS
+    const textPayload = JSON.stringify(orders);
     
-    // Gửi bằng phương thức POST thông thường, bỏ hẳn mode: "no-cors"
-    await fetch(APP_CONFIG.sheetSyncFunctionUrl, {
+    // Gửi bằng chế độ no-cors nhưng gửi text thô sang Google
+    fetch(APP_CONFIG.sheetSyncFunctionUrl, {
       method: "POST",
-      body: payload
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      body: textPayload
     });
     
-    console.log("Đã kích hoạt lệnh gửi thành công!");
-    if (typeof showToast === "function") {
-      showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
-    }
+    console.log("Đã phát lệnh gửi thành công!");
+    alert("Hệ thống đã lệnh đồng bộ ngầm. Hãy đợi khoảng 3-5 giây rồi kiểm tra Google Sheet nhé!");
   } catch (error) {
-    console.error("Lỗi khi kết nối với Google Sheet:", error);
+    console.error("Lỗi kết nối:", error);
+    alert("Không thể phát lệnh gửi: " + error.message);
   }
 }
     function renderAll() {
