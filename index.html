@@ -664,44 +664,32 @@
     }
 
     async function syncToGoogleSheet(orders) {
-      if (!APP_CONFIG.sheetSyncFunctionUrl) {
-        console.log("Chưa cấu hình URL đồng bộ Google Sheet.");
-        return;
-      }
-      
-      console.log("Bắt đầu gửi dữ liệu sang Google Sheet...", orders);
-      
-      try {
-        const payload = JSON.stringify({ orders: orders });
-        
-        const response = await fetch(APP_CONFIG.sheetSyncFunctionUrl, {
-          method: "POST",
-          mode: "no-cors", 
-          headers: {
-            "Content-Type": "text/plain;charset=utf-8"
-          },
-          body: payload
-        });
-        
-        console.log("Đã kích hoạt lệnh gửi ngầm thành công!");
-        
-        // Kiểm tra an toàn: Nếu có hàm showToast thì dùng, không thì dùng alert mặc định hoặc bỏ qua
-        if (typeof showToast === "function") {
-          showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
-        } else {
-          console.log("Đang đồng bộ dữ liệu sang Google Sheet...");
-        }
-        
-      } catch (error) {
-        console.error("Lỗi khi kết nối với Google Sheet:", error);
-        if (typeof showToast === "function") {
-          showToast("Không thể kết nối với Google Sheet", "error");
-        } else {
-          alert("Không thể kết nối với Google Sheet!");
-        }
-      }
+  if (!APP_CONFIG.sheetSyncFunctionUrl) {
+    console.log("Chưa cấu hình URL đồng bộ Google Sheet.");
+    return;
+  }
+  
+  console.log("Bắt đầu gửi dữ liệu sang Google Sheet...", orders);
+  
+  try {
+    // Chuyển dữ liệu thành chuỗi JSON bọc trong một tham số 'data'
+    const payload = new URLSearchParams();
+    payload.append("data", JSON.stringify(orders));
+    
+    // Gửi bằng phương thức POST thông thường, bỏ hẳn mode: "no-cors"
+    await fetch(APP_CONFIG.sheetSyncFunctionUrl, {
+      method: "POST",
+      body: payload
+    });
+    
+    console.log("Đã kích hoạt lệnh gửi thành công!");
+    if (typeof showToast === "function") {
+      showToast("Đang đồng bộ dữ liệu sang Google Sheet...", "info");
     }
-
+  } catch (error) {
+    console.error("Lỗi khi kết nối với Google Sheet:", error);
+  }
+}
     function renderAll() {
       renderDashboard();
       renderOrders();
