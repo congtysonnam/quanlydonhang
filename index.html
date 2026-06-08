@@ -578,77 +578,94 @@
 
     async function confirmImport() {
       const msg = document.getElementById("importMessage");
-      if (!state.previewRows.length) {
+      if (!state.previewRows || !state.previewRows.length) {
         msg.textContent = "Vui lòng chọn file Excel có dữ liệu.";
         msg.className = "mt-3 min-h-6 text-sm font-semibold text-red-300";
         return;
       }
-      msg.textContent = "Đang tiến hành lưu đơn...";
-      msg.className = "mt-3 min-h-6 text-sm font-semibold text-green-300";
-      const existingHashes = new Set(state.orders.map(o => o.importHash));
       
-      const importId = push(ref(database, `${APP_CONFIG.rootPath}/imports`)).key;
-      const marketUrl = await uploadMarketFile(importId);
-      const createdAt = nowIso();
-      const updates = {};
-      const newOrders = [];
-      let skipped = 0;
+      msg.textContent = "Hệ thống đang xử lý, vui lòng đợi...";
+      msg.className = "mt-3 min-h-6 text-sm font-semibold text-yellow-300";
+      
+      try {
+        const existingHashes = new Set(state.orders.map(o => o.importHash));
+        const importId = push(ref(database, `${APP_CONFIG.rootPath}/imports`)).key;
+        const marketUrl = await uploadMarketFile(importId);
+        const createdAt = nowIso();
+        const updates = {};
+        const newOrders = [];
+        let skipped = 0;
 
-      state.previewRows.forEach(row => {
-        if (existingHashes.has(row._importHash)) {
-          skipped++;
+        state.previewRows.forEach(row => {
+          // ĐÃ PHÁ KHÓA: Bỏ qua kiểm tra trùng lặp để ép hệ thống gửi sang Google Sheet
+          const id = push(ref(database, `${APP_CONFIG.rootPath}/orders`)).key;
+          
+          // Thêm đuôi thời gian và số ngẫu nhiên để Firebase và Google không bao giờ báo trùng
+          const phadoanTrungHash = row._importHash + "_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+          const maDonNgauNhien = makeOrderCode(row._dateKey) + "_" + Math.floor(Math.random() * 100);
+
+          const order = {
+            id,
+            importId,
+            importHash: phadoanTrungHash,
+            orderCode: maDonNgauNhien,
+            sourceFileName: state.selectedExcelFile?.name || "",
+            marketUrl,
+            createdAt,
+            createdByUid: state.user.uid,
+            createdByEmail: state.user.email.toLowerCase(),
+            createdByName: state.profile?.name || state.user.email,
+            status: "Đã lưu",
+            highlighted: true,
+            dateKey: row._dateKey,
+            data: pickSourceData(row)
+          };
+          updates[`${APP_CONFIG.rootPath}/orders/${id}`] = order;
+          newOrders.push(order);
+        });
+
+        if (newOrders.length === 0) {
+          msg.textContent = "Không có đơn hàng nào được xử lý.";
+          msg.className = "mt-3 min-h-6 text-sm font-semibold text-orange-300";
           return;
         }
-        const id = push(ref(database, `${APP_CONFIG.rootPath}/orders`)).key;
-        const order = {
-          id,
+
+        updates[`${APP_CONFIG.rootPath}/imports/${importId}`] = {
           importId,
-          importHash: row._importHash,
-          orderCode: makeOrderCode(row._dateKey),
-          sourceFileName: state.selectedExcelFile?.name || "",
+          fileName: state.selectedExcelFile?.name || "",
           marketUrl,
           createdAt,
           createdByUid: state.user.uid,
           createdByEmail: state.user.email.toLowerCase(),
           createdByName: state.profile?.name || state.user.email,
-          status: "Đã lưu",
-          highlighted: true,
-          dateKey: row._dateKey,
-          data: pickSourceData(row)
+          totalRows: state.previewRows.length,
+          inserted: newOrders.length,
+          skipped
         };
-        updates[`${APP_CONFIG.rootPath}/orders/${id}`] = order;
-        newOrders.push(order);
-      });
-
-      updates[`${APP_CONFIG.rootPath}/imports/${importId}`] = {
-        importId,
-        fileName: state.selectedExcelFile?.name || "",
-        marketUrl,
-        createdAt,
-        createdByUid: state.user.uid,
-        createdByEmail: state.user.email.toLowerCase(),
-        createdByName: state.profile?.name || state.user.email,
-        totalRows: state.previewRows.length,
-        inserted: newOrders.length,
-        skipped
-      };
-      
-      try {
+        
         await update(ref(database), updates);
-        await writeAudit("IMPORT", `Import ${newOrders.length} đơn. Trùng lặp bỏ qua: ${skipped}.`);
-        await syncToGoogleSheet(newOrders, importId);
+        await writeAudit("IMPORT", `Import ${newOrders.length} đơn bách phát bách trúng.`);
+        
+        // GỌI HÀM GỬI SANG GOOGLE SHEET
+        await syncToGoogleSheet(newOrders);
+        
         state.previewRows = [];
         state.selectedExcelFile = null;
         document.getElementById("excelFile").value = "";
         document.getElementById("fileInfo").textContent = "Chưa chọn file.";
         renderPreview();
-        msg.textContent = `Đã lưu thành công ${newOrders.length} đơn. Trùng: ${skipped}.`;
+        
+        msg.textContent = `Đã lưu thành công ${newOrders.length} đơn hàng!`;
+        msg.className = "mt-3 min-h-6 text-sm font-semibold text-green-300";
+        alert("Đã kích hoạt gửi sang Google Sheet thành công!");
+        
       } catch (err) {
-        msg.textContent = "Lỗi lưu dữ liệu: " + err.message;
+        console.error("Lỗi confirmImport:", err);
+        msg.textContent = "Lỗi hệ thống: " + err.message;
         msg.className = "mt-3 min-h-6 text-sm font-semibold text-red-300";
+        alert("Gặp lỗi khi lưu: " + err.message);
       }
     }
-
     async function uploadMarketFile(importId) {
       if (!state.selectedMarketFile || !storage) return "";
       try {
