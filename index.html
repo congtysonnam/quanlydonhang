@@ -162,7 +162,16 @@
 
         <div class="mt-4 grid grid-cols-2 gap-4 max-xl:grid-cols-1">
           <section class="card min-w-0 p-4">
-            <div class="mb-3 flex items-center justify-between"><h3 class="text-lg font-bold">Đơn hàng mới cập nhật</h3><button class="text-sm text-blue-300" id="viewAllOrdersBtn">Xem tất cả</button></div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-lg font-bold">Đơn hàng mới cập nhật</h3>
+              <button class="text-sm text-blue-300" id="viewAllOrdersBtn">Xem tất cả</button>
+            </div>
+            <div class="mb-3 flex flex-wrap items-end gap-2">
+              <label class="text-xs text-slate-400">Từ ngày<input id="cleanupFrom" class="input mt-1" type="date"></label>
+              <label class="text-xs text-slate-400">Đến ngày<input id="cleanupTo" class="input mt-1" type="date"></label>
+              <button class="btn btn-ghost" id="deleteFilteredFirebaseBtn">Xóa theo ngày</button>
+              <button class="btn text-red-300 hover:bg-red-950/40" id="deleteAllFirebaseBtn">Xóa all</button>
+            </div>
             <div class="scrollbar max-h-[360px] overflow-auto"><table id="recentOrdersTable"></table></div>
           </section>
           <section class="card min-w-0 p-4">
@@ -211,9 +220,12 @@
         </div>
 
         <section class="card mt-4 p-4">
-          <div class="mb-3 flex items-center justify-between">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h3 class="text-lg font-bold">Preview dữ liệu Excel</h3>
-            <span class="text-sm text-slate-400">Các dòng lưu mới sẽ được đánh dấu vàng trong app và Google Sheet.</span>
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-slate-400">Có thể sửa hoặc xóa dòng trước khi lưu.</span>
+              <button class="btn btn-ghost" id="clearPreviewBtn">Xóa preview</button>
+            </div>
           </div>
           <div class="scrollbar max-h-[460px] overflow-auto"><table id="previewTable"></table></div>
         </section>
@@ -221,7 +233,7 @@
 
       <section id="orders" class="screen hide">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 class="text-2xl font-extrabold">Tổng đơn hàng</h2><p class="mt-1 text-sm text-slate-400">Dữ liệu chính lưu trên Firebase, Google Sheet là bản đồng bộ.</p></div>
+          <div><h2 class="text-2xl font-extrabold">Tổng đơn hàng</h2><p class="mt-1 text-sm text-slate-400">Admin xem dữ liệu trực tiếp từ Google Sheet 2026; tài khoản kinh doanh xem đơn đã cập nhật của mình.</p></div>
           <div class="flex gap-2"><button class="btn btn-ghost" id="reloadAllBtn">Làm mới</button><button class="btn btn-green" id="exportOrdersBtn">Xuất Excel</button></div>
         </div>
         <div class="card mt-4 p-4">
@@ -295,6 +307,12 @@
       rootPath: "order_system",
       sheetSyncFunctionUrl: "https://script.google.com/macros/s/AKfycbwGFnIKKPFuD_P62ydRD_p_0fRHhUabsaL0uQ0N1XbojxVMxmzdNzCZ3fJkSYBsqeR9/exec",
       bootstrapAdminEmails: ["admin@congty.com"],
+      roleEmails: {
+        ADMIN: ["admin@congty.com"],
+        SALES: ["thanhkinhdanhsonnam@gmail.com"],
+        VIEWER: []
+      },
+      defaultNewUserRole: "SALES",
       sourceHeaders: [
         "STT", "Khách hàng", "Mã hàng", "Cỡ hạt", "Chất lượng đá", "Quy cách bao",
         "Quy cách đóng hàng", "Số cont", "Số tấn", "Hãng vận chuyển", "Ngày tàu đi",
@@ -307,6 +325,7 @@
       user: null,
       profile: null,
       orders: [],
+      sheetOrders: [],
       auditLogs: [],
       users: [],
       previewRows: [],
@@ -375,6 +394,7 @@
         document.getElementById("loginMessage").textContent = "";
         enterApp();
         subscribeData();
+        loadSheetOrders();
         writeAudit("LOGIN", "Đăng nhập hệ thống");
       });
     }
@@ -392,6 +412,11 @@
       document.getElementById("btnFilter").addEventListener("click", renderOrders);
       document.getElementById("filterSearch").addEventListener("input", renderOrders);
       document.getElementById("saveUserProfileBtn").addEventListener("click", saveUserProfile);
+      document.getElementById("clearPreviewBtn").addEventListener("click", clearPreviewRows);
+      document.getElementById("deleteFilteredFirebaseBtn").addEventListener("click", () => deleteFirebaseOrders("filtered"));
+      document.getElementById("deleteAllFirebaseBtn").addEventListener("click", () => deleteFirebaseOrders("all"));
+      document.getElementById("previewTable").addEventListener("change", handlePreviewEdit);
+      document.getElementById("previewTable").addEventListener("click", handlePreviewAction);
       
       document.querySelectorAll(".nav-item").forEach(btn => {
         btn.addEventListener("click", () => showScreen(btn.dataset.screen));
@@ -438,32 +463,18 @@
         const snap = await get(userRef);
         let profile = snap.exists() ? snap.val() : null;
 
-        if (!profile && APP_CONFIG.bootstrapAdminEmails.map(x => x.toLowerCase()).includes(email)) {
-          profile = {
-            uid: user.uid,
-            email,
-            name: user.displayName || "Admin Hệ thống",
-            role: "ADMIN",
-            active: true,
-            createdAt: nowIso()
-          };
+        const codedRole = roleForEmail(email);
+        if (profile && codedRole) {
+          profile = { ...profile, role: codedRole, active: true, updatedAt: nowIso() };
+          await set(userRef, profile);
+        } else if (!profile) {
+          profile = profileFromAuthUser(user, codedRole || APP_CONFIG.defaultNewUserRole);
           await set(userRef, profile);
         }
         state.profile = profile;
       } catch (e) {
         console.error("Lỗi đồng bộ cấu hình Profile:", e);
-        if (APP_CONFIG.bootstrapAdminEmails.map(x => x.toLowerCase()).includes(email)) {
-          state.profile = {
-            uid: user.uid,
-            email,
-            name: "Admin Dự phòng",
-            role: "ADMIN",
-            active: true,
-            createdAt: nowIso()
-          };
-        } else {
-          state.profile = null;
-        }
+        state.profile = profileFromAuthUser(user, roleForEmail(email) || APP_CONFIG.defaultNewUserRole);
       }
     }
 
@@ -476,6 +487,8 @@
         document.getElementById("currentRole").textContent = state.profile.role;
         document.getElementById("avatar").textContent = initials(state.profile.name || state.user.email);
         document.getElementById("usersNav").classList.toggle("hide", !isAdmin());
+        document.getElementById("deleteFilteredFirebaseBtn").classList.toggle("hide", !isAdmin());
+        document.getElementById("deleteAllFirebaseBtn").classList.toggle("hide", !isAdmin());
       }
     }
 
@@ -573,7 +586,62 @@
       document.getElementById("previewTons").textContent = formatNumber(rows.reduce((sum, r) => sum + parseNumber(r["Số tấn"]), 0), 1);
       const uniqueDates = [...new Set(rows.map(r => r._dateKey).filter(Boolean))].sort();
       document.getElementById("previewDate").textContent = uniqueDates.length === 1 ? displayDate(uniqueDates[0]) : `${uniqueDates.length || 0} ngày`;
-      renderSimpleTable("previewTable", rows.slice(0, 100), APP_CONFIG.sourceHeaders.concat(["_dateKey"]));
+      renderPreviewTable(rows);
+    }
+
+    function renderPreviewTable(rows) {
+      const table = document.getElementById("previewTable");
+      if (!table) return;
+      if (!rows.length) {
+        table.innerHTML = `<tbody><tr><td class="py-8 text-center text-slate-500">Chưa có dữ liệu preview.</td></tr></tbody>`;
+        return;
+      }
+      const headers = APP_CONFIG.sourceHeaders;
+      table.innerHTML =
+        `<thead><tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join("")}<th>Ngày chuẩn</th><th>Thao tác</th></tr></thead>` +
+        `<tbody>${rows.map((row, idx) => `
+          <tr>
+            ${headers.map(h => `<td><input class="input min-w-[150px]" data-preview-index="${idx}" data-preview-header="${escapeHtml(h)}" value="${escapeHtml(previewCellValue(row[h]))}"></td>`).join("")}
+            <td>${escapeHtml(displayDate(row._dateKey))}</td>
+            <td><button class="btn text-red-300 hover:bg-red-950/40" data-preview-delete="${idx}">Xóa</button></td>
+          </tr>
+        `).join("")}</tbody>`;
+    }
+
+    function handlePreviewEdit(event) {
+      const input = event.target.closest("[data-preview-index]");
+      if (!input) return;
+      const index = Number(input.dataset.previewIndex);
+      const header = input.dataset.previewHeader;
+      const row = state.previewRows[index];
+      if (!row || !header) return;
+      row[header] = input.value;
+      recalcPreviewRow(row);
+      renderPreview();
+    }
+
+    function handlePreviewAction(event) {
+      const btn = event.target.closest("[data-preview-delete]");
+      if (!btn) return;
+      const index = Number(btn.dataset.previewDelete);
+      state.previewRows.splice(index, 1);
+      renderPreview();
+    }
+
+    function clearPreviewRows() {
+      if (!state.previewRows.length) return;
+      if (!confirm("Xóa toàn bộ dữ liệu preview chưa lưu?")) return;
+      state.previewRows = [];
+      renderPreview();
+    }
+
+    function recalcPreviewRow(row) {
+      row._dateKey = dateKey(firstNonEmpty(APP_CONFIG.dateHeaders.map(h => row[h])));
+      row._importHash = hashLike(APP_CONFIG.sourceHeaders.filter(h => h !== "STT").map(h => valueKey(row[h])).join("|"));
+    }
+
+    function previewCellValue(value) {
+      return value instanceof Date ? displayDate(dateKey(value)) : (value ?? "");
     }
 
     async function confirmImport() {
@@ -648,6 +716,7 @@
         
         // GỌI HÀM GỬI SANG GOOGLE SHEET
         await syncToGoogleSheet(newOrders);
+        await loadSheetOrders();
         
         state.previewRows = [];
         state.selectedExcelFile = null;
@@ -716,22 +785,20 @@
     }
 
     function renderDashboard() {
+      const orders = visibleOrders();
       const today = dateKey(new Date());
       const weekStart = startOfWeekKey(new Date());
       const monthKey = today.slice(0, 7);
-      document.getElementById("kpiToday").textContent = state.orders.filter(o => o.dateKey === today).length;
-      document.getElementById("kpiWeek").textContent = state.orders.filter(o => o.dateKey >= weekStart).length;
-      document.getElementById("kpiMonth").textContent = state.orders.filter(o => (o.dateKey || "").startsWith(monthKey)).length;
-      document.getElementById("kpiTotal").textContent = state.orders.length;
-      const recent = [...state.orders].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 8);
+      document.getElementById("kpiToday").textContent = orders.filter(o => o.dateKey === today).length;
+      document.getElementById("kpiWeek").textContent = orders.filter(o => o.dateKey >= weekStart).length;
+      document.getElementById("kpiMonth").textContent = orders.filter(o => (o.dateKey || "").startsWith(monthKey)).length;
+      document.getElementById("kpiTotal").textContent = orders.length;
+      const recent = [...orders].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 8);
       renderOrderTable("recentOrdersTable", recent);
     }
 
     function renderOrders() {
-      let rows = [...state.orders];
-      if (!isAdmin() && state.profile?.role !== "VIEWER") {
-        rows = rows.filter(o => o.createdByUid === state.user?.uid);
-      }
+      let rows = totalOrdersSource();
       const from = document.getElementById("filterFrom").value;
       const to = document.getElementById("filterTo").value;
       const q = normalizeText(document.getElementById("filterSearch").value || "");
@@ -850,7 +917,7 @@
     }
 
     function exportOrders() {
-      const rows = state.orders.map(o => ({
+      const rows = totalOrdersSource().map(o => ({
         "Ngày giao": displayDate(o.dateKey),
         "Mã đơn": o.orderCode,
         ...o.data,
@@ -867,7 +934,8 @@
       writeAudit("EXPORT", `Xuất file Excel gồm ${rows.length} đơn hàng.`);
     }
 
-    function reloadAll() {
+    async function reloadAll() {
+      await loadSheetOrders();
       renderAll();
       writeAudit("REFRESH", "Yêu cầu đồng bộ lại màn hình dữ liệu.");
     }
@@ -898,6 +966,107 @@
 
     function isAdmin() { return state.profile?.role === "ADMIN"; }
 
+    function roleForEmail(email) {
+      const normalizedEmail = String(email || "").toLowerCase();
+      const roleEmails = APP_CONFIG.roleEmails || {};
+      for (const role of ["ADMIN", "SALES", "VIEWER", "CUSTOMER"]) {
+        const emails = (roleEmails[role] || []).map(x => String(x).toLowerCase());
+        if (emails.includes(normalizedEmail)) return role;
+      }
+      const bootstrapAdmins = (APP_CONFIG.bootstrapAdminEmails || []).map(x => String(x).toLowerCase());
+      return bootstrapAdmins.includes(normalizedEmail) ? "ADMIN" : "";
+    }
+
+    function profileFromAuthUser(user, role) {
+      const email = user.email.toLowerCase();
+      return {
+        uid: user.uid,
+        email,
+        name: user.displayName || email.split("@")[0],
+        role: role || "SALES",
+        active: true,
+        createdAt: nowIso()
+      };
+    }
+
+    function visibleOrders() {
+      if (isAdmin() || state.profile?.role === "VIEWER") return [...state.orders];
+      return state.orders.filter(o => o.createdByUid === state.user?.uid);
+    }
+
+    function totalOrdersSource() {
+      return isAdmin() ? [...state.sheetOrders] : visibleOrders();
+    }
+
+    function loadSheetOrders() {
+      if (!isAdmin() || !APP_CONFIG.sheetSyncFunctionUrl) return Promise.resolve([]);
+      return new Promise((resolve) => {
+        const callbackName = `sheetOrdersCallback_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const script = document.createElement("script");
+        const cleanup = () => {
+          delete window[callbackName];
+          script.remove();
+        };
+        window[callbackName] = (payload) => {
+          state.sheetOrders = Array.isArray(payload?.orders) ? payload.orders : [];
+          cleanup();
+          renderOrders();
+          resolve(state.sheetOrders);
+        };
+        script.onerror = () => {
+          console.error("Không tải được dữ liệu Google Sheet.");
+          cleanup();
+          resolve([]);
+        };
+        const sep = APP_CONFIG.sheetSyncFunctionUrl.includes("?") ? "&" : "?";
+        script.src = `${APP_CONFIG.sheetSyncFunctionUrl}${sep}action=sheetOrders&callback=${callbackName}&_=${Date.now()}`;
+        document.body.appendChild(script);
+      });
+    }
+
+    async function deleteFirebaseOrders(mode) {
+      if (!isAdmin()) {
+        alert("Chỉ ADMIN được xóa dữ liệu Firebase.");
+        return;
+      }
+      const from = document.getElementById("cleanupFrom").value;
+      const to = document.getElementById("cleanupTo").value;
+      let rows = [...state.orders];
+
+      if (mode === "filtered") {
+        if (!from && !to) {
+          alert("Vui lòng chọn ít nhất một mốc ngày để xóa theo bộ lọc.");
+          return;
+        }
+        if (from) rows = rows.filter(o => o.dateKey >= from);
+        if (to) rows = rows.filter(o => o.dateKey <= to);
+      }
+
+      if (!rows.length) {
+        alert("Không có đơn Firebase phù hợp để xóa.");
+        return;
+      }
+
+      const label = mode === "all" ? "toàn bộ đơn mới cập nhật trên Firebase" : `${rows.length} đơn Firebase theo bộ lọc ngày`;
+      if (!confirm(`Bạn chắc chắn muốn xóa ${label}? Dữ liệu Google Sheet không bị xóa.`)) return;
+
+      const updates = {};
+      rows.forEach(order => {
+        if (order.id) updates[`${APP_CONFIG.rootPath}/orders/${order.id}`] = null;
+      });
+      if (mode === "all") {
+        updates[`${APP_CONFIG.rootPath}/imports`] = null;
+      }
+
+      try {
+        await update(ref(database), updates);
+        await writeAudit("CLEAN_FIREBASE", `Xóa ${rows.length} đơn mới cập nhật khỏi Firebase.`);
+        alert(`Đã xóa ${rows.length} đơn khỏi Firebase. Google Sheet vẫn giữ nguyên.`);
+      } catch (err) {
+        alert("Lỗi xóa Firebase: " + err.message);
+      }
+    }
+
     function makeOrderCode(date) {
       const key = (date || dateKey(new Date())).replace(/-/g, "").slice(2);
       return `DH${key}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -914,18 +1083,29 @@
 
     function dateKey(value) {
       if (!value) return "";
-      let d = value;
-      if (!(d instanceof Date)) {
-        if (typeof value === "number") {
-          d = new Date(Math.round((value - 25569) * 86400 * 1000));
+      let d;
+      if (value instanceof Date) {
+        d = value;
+      } else if (typeof value === "number") {
+        d = new Date(Math.round((value - 25569) * 86400 * 1000));
+      } else {
+        const text = String(value).trim();
+        const ymd = text.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[T\s].*)?$/);
+        const dmy = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:[T\s].*)?$/);
+        if (ymd) {
+          d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+        } else if (dmy) {
+          d = new Date(Number(dmy[3].length === 2 ? "20" + dmy[3] : dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
         } else {
-          const text = String(value).trim();
-          const m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-          d = m ? new Date(Number(m[3].length === 2 ? "20" + m[3] : m[3]), Number(m[2]) - 1, Number(m[1])) : new Date(text);
+          d = new Date(text);
         }
       }
       if (Number.isNaN(d.getTime())) return "";
-      return d.toISOString().slice(0, 10);
+      return [
+        d.getFullYear(),
+        String(d.getMonth() + 1).padStart(2, "0"),
+        String(d.getDate()).padStart(2, "0")
+      ].join("-");
     }
 
     function displayDate(key) {
@@ -955,7 +1135,7 @@
     }
 
     function serializeValue(value) {
-      if (value instanceof Date) return dateKey(value);
+      if (value instanceof Date) return displayDate(dateKey(value));
       return value ?? "";
     }
 
